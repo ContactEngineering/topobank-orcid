@@ -9,7 +9,6 @@ description = "ORCID identity and permission plugin for Topobank"
 requires-python = ">=3.10"
 dependencies = [
     "django-allauth[socialaccount]",
-    "django-guardian",
     "django-notifications-hq",
 ]
 

@@ -3,8 +3,6 @@ import sys
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
-from guardian.shortcuts import get_user_perms, remove_perm
-
 from topobank.analysis.models import WorkflowResult
 from topobank.manager.models import Surface, Topography
 
@@ -31,12 +29,6 @@ class Command(BaseCommand):
         surfaces = Surface.objects.filter(created_by=user)
         topographies = Topography.objects.filter(surface__in=surfaces)
         analyses = WorkflowResult.objects.filter(topography__in=topographies)
-
-        _log.info("Removing surface related permissions..")
-        for s in surfaces:
-            permissions = get_user_perms(user, s)
-            for p in permissions:
-                remove_perm(p, user, s)
 
         _log.info("Removing analyses related to surfaces created by user '{}'..".format(user.name))
         analyses.delete()
