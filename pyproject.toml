@@ -20,4 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-django", "factory-boy"]
+dev = ["pytest", "pytest-django", "pytest-env", "factory-boy"]
+
+[tool.pytest.ini_options]
+env = ["DJANGO_SETTINGS_MODULE=topobank_orcid_test_settings"]
