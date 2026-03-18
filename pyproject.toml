@@ -1,0 +1,17 @@
+[build-system]
+requires = ["flit_core>=3.2"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "topobank-orcid"
+version = "0.1.0"
+description = "ORCID identity and permission plugin for Topobank"
+requires-python = ">=3.10"
+dependencies = [
+    "django-allauth[socialaccount]",
+    "django-guardian",
+    "django-notifications-hq",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-django", "factory-boy"]
