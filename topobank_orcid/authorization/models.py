@@ -8,7 +8,8 @@ import logging
 from django.db import models
 from django.db.models import Q, QuerySet
 from notifications.signals import notify
-from rest_framework.exceptions import NotFound, PermissionDenied
+from django.core.exceptions import PermissionDenied
+from django.http import Http404 as NotFound
 
 from topobank.authorization.models import (
     ACCESS_LEVELS,
