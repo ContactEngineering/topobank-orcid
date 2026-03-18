@@ -7,6 +7,13 @@ name = "topobank-orcid"
 version = "0.1.0"
 description = "ORCID identity and permission plugin for Topobank"
 requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Gunner Clary", email = "gunner.clary@surface.design" },
+    { name = "Ioannis Nezis", email = "ioannis@nezis.de" },
+    { name = "Lars Pastewka", email = "lars.pastewka@imtek.uni-freiburg.de" },
+    { name = "Michael Röttger", email = "info@michael-roettger.de" },
+]
 dependencies = [
     "django-allauth[socialaccount]",
     "django-notifications-hq",
