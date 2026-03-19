@@ -105,14 +105,19 @@ class User(AbstractUser):
             ("can_skip_terms", "Can skip all checkings for terms and conditions."),
         )
 
+    @classmethod
+    def resolve(cls, url):
+        """Resolve a user from a URL or integer ID."""
+        try:
+            pk = int(url)
+            return cls.objects.get(pk=pk)
+        except ValueError:
+            match = resolve(urlparse(url).path)
+            if match.view_name != "users:user-v1-detail":
+                raise ValueError("URL does not resolve to a User instance")
+            return cls.objects.get(**match.kwargs)
+
 
 def resolve_user(url):
-    """Resolve user from URL or ID"""
-    try:
-        id = int(url)
-        return User.objects.get(pk=id)
-    except ValueError:
-        match = resolve(urlparse(url).path)
-        if match.view_name != "users:user-v1-detail":
-            raise ValueError("URL does not resolve to an User instance")
-        return User.objects.get(**match.kwargs)
+    """Resolve user from URL or ID. Prefer User.resolve(url)."""
+    return User.resolve(url)

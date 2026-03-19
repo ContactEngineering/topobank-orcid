@@ -63,13 +63,19 @@ class Organization(models.Model):
         """Add user to this organization."""
         user.groups.add(self.group)
 
+    @classmethod
+    def resolve(cls, url):
+        """Resolve an organization from a URL or integer ID."""
+        try:
+            pk = int(url)
+            return cls.objects.get(pk=pk)
+        except ValueError:
+            match = resolve(urlparse(url).path)
+            if match.view_name != "organizations:organization-v1-detail":
+                raise ValueError("URL does not resolve to an Organization instance")
+            return cls.objects.get(**match.kwargs)
+
 
 def resolve_organization(url):
-    try:
-        id = int(url)
-        return Organization.objects.get(pk=id)
-    except ValueError:
-        match = resolve(urlparse(url).path)
-        if match.view_name != "organizations:organization-v1-detail":
-            raise ValueError("URL does not resolve to an Organization instance")
-        return Organization.objects.get(**match.kwargs)
+    """Resolve organization from URL or ID. Prefer Organization.resolve(url)."""
+    return Organization.resolve(url)
