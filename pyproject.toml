@@ -24,3 +24,4 @@ dev = ["pytest", "pytest-django", "pytest-env", "factory-boy", "django-celery-re
 
 [tool.pytest.ini_options]
 env = ["DJANGO_SETTINGS_MODULE=topobank_orcid_test_settings"]
+testpaths = ["tests"]
