@@ -1,8 +1,7 @@
 from django.conf import settings
 from django.shortcuts import reverse
 from django.urls import NoReverseMatch
-
-from .anonymous import get_anonymous_user
+from topobank.authorization import get_anonymous_user
 
 HEADLESS_ONLY = hasattr(settings, "HEADLESS_ONLY") and settings.HEADLESS_ONLY
 
@@ -34,15 +33,18 @@ def anonymous_user_middleware(get_response):
     """
 
     def middleware(request):
-        if HEADLESS_ONLY:
-            if not request.user.is_authenticated:
-                request.user = get_anonymous_user()
-        else:
-            if not (
-                request.user.is_authenticated
-                or request.path in _no_anonymous_substitution_urls
-            ):
-                request.user = get_anonymous_user()
+        should_substitute = (
+            HEADLESS_ONLY
+            and not request.user.is_authenticated
+        ) or (
+            not HEADLESS_ONLY
+            and not request.user.is_authenticated
+            and request.path not in _no_anonymous_substitution_urls
+        )
+        if should_substitute:
+            anonymous_user = get_anonymous_user()
+            if anonymous_user is not None:
+                request.user = anonymous_user
 
         response = get_response(request)
         return response

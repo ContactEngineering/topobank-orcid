@@ -5,23 +5,18 @@ This module provides PermissionSet backed by User + Organization permission rows
 """
 import logging
 
+from django.core.exceptions import PermissionDenied
 from django.db import models
 from django.db.models import Q, QuerySet
-from notifications.signals import notify
-from django.core.exceptions import PermissionDenied
 from django.http import Http404 as NotFound
-
-from topobank.authorization.models import (
-    ACCESS_LEVELS,
-    PERMISSION_CHOICES,
-    AbstractPermissionSet,
-    ViewEditFull,
-    ViewEditFullNone,
-    levels_with_access,
-)
+from notifications.signals import notify
+from topobank.authorization import get_anonymous_user
+from topobank.authorization.models import (ACCESS_LEVELS, PERMISSION_CHOICES,
+                                           AbstractPermissionSet, ViewEditFull,
+                                           ViewEditFullNone,
+                                           levels_with_access)
 
 from ..organizations.models import Organization
-from ..users.anonymous import get_anonymous_user
 
 _log = logging.getLogger(__name__)
 
@@ -55,15 +50,24 @@ def _filter_for_user(
     org_perm_allow = f"{prefix}organization_permissions__allow__in"
 
     if permission == "view":
-        qs_anonymous = queryset.filter(**{user_perm_user: get_anonymous_user()})
         qs_user = queryset.filter(**{user_perm_user: user})
+        union_parts = [qs_user]
+
+        anonymous_user = get_anonymous_user()
+        if anonymous_user is not None:
+            union_parts.append(
+                queryset.filter(**{user_perm_user: anonymous_user})
+            )
 
         if user_group_ids:
-            qs_org = queryset.filter(**{org_perm_group: user_group_ids})
-            union_qs = qs_anonymous.union(qs_user, qs_org)
-        else:
-            union_qs = qs_anonymous.union(qs_user)
+            union_parts.append(
+                queryset.filter(**{org_perm_group: user_group_ids})
+            )
 
+        if len(union_parts) == 1:
+            return union_parts[0]
+
+        union_qs = union_parts[0].union(*union_parts[1:])
         accessible_ids = list(union_qs.values_list('id', flat=True))
         return queryset.filter(id__in=accessible_ids)
     else:
@@ -113,14 +117,22 @@ class PermissionSet(AbstractPermissionSet):
         return _filter_for_user(queryset, user, permission, prefix="permissions__")
 
     def get_for_user(self, user):
-        """Return permissions of a specific user"""
+        """Return permissions of a specific user.
+
+        Falls back to the anonymous user's permission when one is
+        configured — authenticated users inherit anonymous view access.
+        """
         anonymous_user = get_anonymous_user()
 
         if 'user_permissions' in getattr(self, '_prefetched_objects_cache', {}):
             user_permissions = [
                 p for p in self.user_permissions.all()
-                if p.user == user or p.user == anonymous_user
+                if p.user == user or (
+                    anonymous_user is not None and p.user == anonymous_user
+                )
             ]
+        elif anonymous_user is None:
+            user_permissions = list(self.user_permissions.filter(user=user))
         else:
             user_permissions = list(self.user_permissions.filter(
                 Q(user=user) | Q(user=anonymous_user)
@@ -222,11 +234,12 @@ class PermissionSet(AbstractPermissionSet):
             )
 
     def notify_users(self, sender, verb, description):
-        """Notify all users with permissions except sender"""
+        """Notify all users with permissions except sender (and anonymous, if any)"""
         anonymous_user = get_anonymous_user()
-        for permission in self.user_permissions.exclude(
-            Q(user=sender) | Q(user=anonymous_user)
-        ):
+        exclude_q = Q(user=sender)
+        if anonymous_user is not None:
+            exclude_q |= Q(user=anonymous_user)
+        for permission in self.user_permissions.exclude(exclude_q):
             notify.send(
                 sender=sender,
                 recipient=permission.user,

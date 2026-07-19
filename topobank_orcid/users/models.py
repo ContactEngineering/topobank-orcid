@@ -5,8 +5,9 @@ from django.db import models
 from django.db.utils import ProgrammingError
 from django.urls import resolve
 from django.utils.translation import gettext_lazy as _
+from topobank.authorization import get_anonymous_user
 
-from .anonymous import get_anonymous_user
+_ANONYMOUS_USER_UNSET = object()
 
 
 class ORCIDException(Exception):
@@ -18,8 +19,9 @@ class User(AbstractUser):
     # patterns around the globe.
     name = models.CharField(_("Name of User"), max_length=255)
 
-    # Load anonymous user once and cache to avoid further database hits
-    anonymous_user = None
+    # Cached anonymous user lookup. Sentinel distinguishes "not yet
+    # loaded" from a legitimate ``None`` (no anonymous user configured).
+    anonymous_user = _ANONYMOUS_USER_UNSET
 
     def __str__(self):
         orcid_id = self.orcid_id
@@ -35,7 +37,7 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
     def _get_anonymous_user(self):
-        if self.anonymous_user is None:
+        if self.anonymous_user is _ANONYMOUS_USER_UNSET:
             self.anonymous_user = get_anonymous_user()
         return self.anonymous_user
 
@@ -88,17 +90,23 @@ class User(AbstractUser):
         Return whether user is anonymous.
         """
         try:
-            return self.id == self._get_anonymous_user().id
+            anonymous_user = self._get_anonymous_user()
         except (ProgrammingError, self.DoesNotExist):
             return super().is_anonymous
+        if anonymous_user is None:
+            return False
+        return self.id == anonymous_user.id
 
     @property
     def is_authenticated(self):
         """Return whether user is authenticated (not anonymous)."""
         try:
-            return self.id != self._get_anonymous_user().id
+            anonymous_user = self._get_anonymous_user()
         except (ProgrammingError, self.DoesNotExist):
-            return super().is_anonymous
+            return super().is_authenticated
+        if anonymous_user is None:
+            return True
+        return self.id != anonymous_user.id
 
     class Meta:
         permissions = (
