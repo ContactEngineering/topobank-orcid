@@ -1,10 +1,10 @@
 import logging
 import sys
 
-from django.conf.urls.static import static
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
+from django.templatetags.static import static
 from notifications.signals import notify
 
 _log = logging.getLogger(__name__)

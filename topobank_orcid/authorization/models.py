@@ -124,21 +124,29 @@ class PermissionSet(AbstractPermissionSet):
         """
         anonymous_user = get_anonymous_user()
 
+        # Separately hold the target user's own permission row (at most one,
+        # enforced by unique_together) and the anonymous user's row. The
+        # anonymous row is expected and must not trigger the >1 guard below.
         if 'user_permissions' in getattr(self, '_prefetched_objects_cache', {}):
-            user_permissions = [
-                p for p in self.user_permissions.all()
-                if p.user == user or (
-                    anonymous_user is not None and p.user == anonymous_user
-                )
+            own_permissions = [
+                p for p in self.user_permissions.all() if p.user == user
             ]
-        elif anonymous_user is None:
-            user_permissions = list(self.user_permissions.filter(user=user))
+            anonymous_permissions = [
+                p for p in self.user_permissions.all()
+                if anonymous_user is not None
+                and p.user == anonymous_user
+                and p.user != user
+            ]
         else:
-            user_permissions = list(self.user_permissions.filter(
-                Q(user=user) | Q(user=anonymous_user)
-            ))
+            own_permissions = list(self.user_permissions.filter(user=user))
+            if anonymous_user is None or anonymous_user == user:
+                anonymous_permissions = []
+            else:
+                anonymous_permissions = list(
+                    self.user_permissions.filter(user=anonymous_user)
+                )
 
-        nb_user_permissions = len(user_permissions)
+        nb_user_permissions = len(own_permissions)
 
         if not hasattr(user, '_cached_group_ids'):
             user._cached_group_ids = list(user.groups.values_list('id', flat=True))
@@ -156,6 +164,8 @@ class PermissionSet(AbstractPermissionSet):
 
         nb_organization_permissions = len(organization_permissions)
 
+        # Only the target user's own rows are constrained to be unique; the
+        # anonymous row is a legitimate additional row and is excluded here.
         if nb_user_permissions > 1:
             raise RuntimeError(
                 f"More than one user permission found for user {user}. "
@@ -164,10 +174,23 @@ class PermissionSet(AbstractPermissionSet):
 
         max_access_level = 0
         if nb_user_permissions > 0:
+            # The user's own row keeps its full permission level.
             max_access_level = max(
                 max_access_level,
-                max(ACCESS_LEVELS[perm.allow] for perm in user_permissions),
+                max(ACCESS_LEVELS[perm.allow] for perm in own_permissions),
             )
+        if len(anonymous_permissions) > 0:
+            # Authenticated users inherit anonymous access, but the anonymous
+            # row can never grant more than "view" (consistent with
+            # _filter_for_user, which excludes anonymous rows for non-view
+            # permissions).
+            anonymous_access_level = max(
+                ACCESS_LEVELS[perm.allow] for perm in anonymous_permissions
+            )
+            anonymous_access_level = min(
+                anonymous_access_level, ACCESS_LEVELS["view"]
+            )
+            max_access_level = max(max_access_level, anonymous_access_level)
         if nb_organization_permissions > 0:
             max_access_level = max(
                 max_access_level,
