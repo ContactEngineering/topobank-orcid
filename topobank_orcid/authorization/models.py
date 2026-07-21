@@ -1,7 +1,7 @@
 """
 Concrete permission implementation for topobank-orcid.
 
-This module provides PermissionSet backed by User + Organization permission rows.
+This module provides PermissionSet backed by User permission rows.
 """
 import logging
 
@@ -15,8 +15,6 @@ from topobank.authorization.models import (ACCESS_LEVELS, PERMISSION_CHOICES,
                                            AbstractPermissionSet, ViewEditFull,
                                            ViewEditFullNone,
                                            levels_with_access)
-
-from ..organizations.models import Organization
 
 _log = logging.getLogger(__name__)
 
@@ -38,16 +36,9 @@ def _filter_for_user(
 
     Note: This implementation uses UNION queries to optimize performance.
     """
-    # Cache user groups to prevent query re-evaluation
-    if not hasattr(user, '_cached_group_ids'):
-        user._cached_group_ids = list(user.groups.values_list('id', flat=True))
-    user_group_ids = user._cached_group_ids
-
     # Build field names with prefix
     user_perm_user = f"{prefix}user_permissions__user"
     user_perm_allow = f"{prefix}user_permissions__allow__in"
-    org_perm_group = f"{prefix}organization_permissions__organization__group_id__in"
-    org_perm_allow = f"{prefix}organization_permissions__allow__in"
 
     if permission == "view":
         qs_user = queryset.filter(**{user_perm_user: user})
@@ -59,11 +50,6 @@ def _filter_for_user(
                 queryset.filter(**{user_perm_user: anonymous_user})
             )
 
-        if user_group_ids:
-            union_parts.append(
-                queryset.filter(**{org_perm_group: user_group_ids})
-            )
-
         if len(union_parts) == 1:
             return union_parts[0]
 
@@ -73,18 +59,9 @@ def _filter_for_user(
     else:
         allowed_levels = levels_with_access(permission)
 
-        qs_user = queryset.filter(**{user_perm_user: user, user_perm_allow: allowed_levels})
-
-        if user_group_ids:
-            qs_org = queryset.filter(
-                **{org_perm_group: user_group_ids, org_perm_allow: allowed_levels}
-            )
-            union_qs = qs_user.union(qs_org)
-        else:
-            return qs_user
-
-        accessible_ids = list(union_qs.values_list('id', flat=True))
-        return queryset.filter(id__in=accessible_ids)
+        return queryset.filter(
+            **{user_perm_user: user, user_perm_allow: allowed_levels}
+        )
 
 
 class PermissionSetManager(models.Manager):
@@ -107,7 +84,7 @@ class PermissionSetManager(models.Manager):
 
 
 class PermissionSet(AbstractPermissionSet):
-    """Concrete permission set backed by User + Organization permission rows."""
+    """Concrete permission set backed by User permission rows."""
 
     objects = PermissionSetManager()
 
@@ -148,22 +125,6 @@ class PermissionSet(AbstractPermissionSet):
 
         nb_user_permissions = len(own_permissions)
 
-        if not hasattr(user, '_cached_group_ids'):
-            user._cached_group_ids = list(user.groups.values_list('id', flat=True))
-        user_group_ids = user._cached_group_ids
-
-        if 'organization_permissions' in getattr(self, '_prefetched_objects_cache', {}):
-            organization_permissions = [
-                p for p in self.organization_permissions.all()
-                if p.organization.group_id in user_group_ids
-            ]
-        else:
-            organization_permissions = list(self.organization_permissions.filter(
-                organization__group_id__in=user_group_ids
-            ))
-
-        nb_organization_permissions = len(organization_permissions)
-
         # Only the target user's own rows are constrained to be unique; the
         # anonymous row is a legitimate additional row and is excluded here.
         if nb_user_permissions > 1:
@@ -191,11 +152,6 @@ class PermissionSet(AbstractPermissionSet):
                 anonymous_access_level, ACCESS_LEVELS["view"]
             )
             max_access_level = max(max_access_level, anonymous_access_level)
-        if nb_organization_permissions > 0:
-            max_access_level = max(
-                max_access_level,
-                max(ACCESS_LEVELS[perm.allow] for perm in organization_permissions),
-            )
         if max_access_level == 0:
             return None
         else:
@@ -212,30 +168,13 @@ class PermissionSet(AbstractPermissionSet):
         """Revoke all permissions from user"""
         self.user_permissions.filter(user=user).delete()
 
-    def grant_for_organization(self, organization: Organization, allow: ViewEditFull):
-        """Grant permission to an organization"""
-        OrganizationPermission.objects.update_or_create(
-            parent=self, organization=organization,
-            defaults={"allow": allow},
-        )
-
-    def revoke_from_organization(self, organization: Organization):
-        """Revoke all permissions from an organization"""
-        self.organization_permissions.filter(organization=organization).delete()
-
     def grant(self, principal, allow: ViewEditFull):
-        """Grant permission"""
-        if isinstance(principal, Organization):
-            return self.grant_for_organization(principal, allow)
-        else:
-            return self.grant_for_user(principal, allow)
+        """Grant permission to a user"""
+        return self.grant_for_user(principal, allow)
 
     def revoke(self, principal):
-        """Revoke permission"""
-        if isinstance(principal, Organization):
-            return self.revoke_from_organization(principal)
-        else:
-            return self.revoke_from_user(principal)
+        """Revoke permission from a user"""
+        return self.revoke_from_user(principal)
 
     def user_has_permission(self, user, access_level: ViewEditFull) -> bool:
         """Check if user has permission for access level given by `allow`"""
@@ -292,24 +231,5 @@ class UserPermission(models.Model):
     user = models.ForeignKey(
         'users.User', on_delete=models.CASCADE
     )
-
-    allow = models.CharField(max_length=4, choices=PERMISSION_CHOICES)
-
-
-class OrganizationPermission(models.Model):
-    """Permission applying to all members of an organization"""
-
-    class Meta:
-        unique_together = ("parent", "organization")
-        indexes = [
-            models.Index(fields=['organization', 'parent'], name='orgperm_org_parent_idx'),
-            models.Index(fields=['parent'], name='orgperm_parent_idx'),
-        ]
-
-    parent = models.ForeignKey(
-        PermissionSet, on_delete=models.CASCADE, related_name="organization_permissions"
-    )
-
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
 
     allow = models.CharField(max_length=4, choices=PERMISSION_CHOICES)

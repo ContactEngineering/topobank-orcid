@@ -1,7 +1,7 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
-from topobank.authorization import get_organization_model, get_permission_model
+from topobank.authorization import get_permission_model
 
 from topobank_orcid.authorization.models import PermissionSet
 
@@ -16,12 +16,6 @@ def user(db):
 def other_user(db):
     User = get_user_model()
     return User.objects.create_user(username="bob", password="password", name="Bob")
-
-
-@pytest.fixture
-def organization(db):
-    Organization = get_organization_model()
-    return Organization.objects.create(name="Test Org")
 
 
 @pytest.fixture
@@ -44,16 +38,6 @@ def test_grant_and_revoke_user(permission_set, other_user):
 
     permission_set.revoke_from_user(other_user)
     assert not permission_set.user_has_permission(other_user, "view")
-
-
-@pytest.mark.django_db
-def test_grant_organization_permission(permission_set, user, organization):
-    organization.add(user)
-    permission_set.grant_for_organization(organization, "view")
-    assert permission_set.user_has_permission(user, "view")
-
-    permission_set.revoke_from_organization(organization)
-    assert not permission_set.user_has_permission(user, "view")
 
 
 @pytest.mark.django_db
