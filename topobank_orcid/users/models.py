@@ -48,7 +48,7 @@ class User(AbstractUser):
             raise ORCIDException("ORCID authentication not configured.")
 
         try:
-            social_account = SocialAccount.objects.get(user_id=self.id)
+            social_account = SocialAccount.objects.get(user_id=self.id, provider="orcid")
         except SocialAccount.DoesNotExist as exc:
             raise ORCIDException("No ORCID account existing for this user.") from exc
         except SocialAccount.MultipleObjectsReturned as exc:

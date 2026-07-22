@@ -3,6 +3,7 @@ import sys
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from topobank.analysis.models import WorkflowResult
 from topobank.manager.models import Surface, Topography
 
@@ -28,7 +29,9 @@ class Command(BaseCommand):
 
         surfaces = Surface.objects.filter(created_by=user)
         topographies = Topography.objects.filter(surface__in=surfaces)
-        analyses = WorkflowResult.objects.filter(topography__in=topographies)
+        analyses = WorkflowResult.objects.filter(
+            Q(subject_topography__in=topographies) | Q(subject_surface__in=surfaces)
+        )
 
         _log.info("Removing analyses related to surfaces created by user '{}'..".format(user.name))
         analyses.delete()
