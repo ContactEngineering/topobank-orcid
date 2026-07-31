@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "topobank-orcid"
-version = "0.1.0"
+version = "1.0.0"
 description = "ORCID identity and permission plugin for Topobank"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
