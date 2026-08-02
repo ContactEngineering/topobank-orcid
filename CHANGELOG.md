@@ -1,5 +1,9 @@
 # Changelog for plugin *topobank-orcid*
 
+## Unreleased
+
+- BUG: No longer stores a whitespace-only user name; added `User.display_name`
+
 ## 1.0.1 (2026-08-02)
 
 - MAINT: Removed the `--changelog` option from the `notify_users` command. The

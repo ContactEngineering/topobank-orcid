@@ -23,17 +23,33 @@ class User(AbstractUser):
     # loaded" from a legitimate ``None`` (no anonymous user configured).
     anonymous_user = _ANONYMOUS_USER_UNSET
 
+    @property
+    def display_name(self):
+        """
+        Name to show for this user, never empty.
+
+        `name` can be blank: it is not validated as non-blank, and `save`
+        derives it from first/last name, which are themselves optional. Falling
+        back to the username keeps every human-readable rendering of a user
+        (`str`, API payloads, staff dashboards) from collapsing to an empty
+        string, which reads as a missing user rather than a nameless one.
+        """
+        return (self.name or "").strip() or self.get_username()
+
     def __str__(self):
         orcid_id = self.orcid_id
         if orcid_id:
-            return "{} ({})".format(self.name, orcid_id)
+            return "{} ({})".format(self.display_name, orcid_id)
         else:
-            return self.name
+            return self.display_name
 
     def save(self, *args, **kwargs):
-        # ensure the full name field is set
-        if not self.name:
-            self.name = f"{self.first_name} {self.last_name}"
+        # Ensure the full name field is set. `strip()` matters on both sides:
+        # a whitespace-only `name` is falsy for humans but truthy for Python,
+        # and joining two empty names yields exactly that, which would then
+        # stick forever because subsequent saves see a non-empty value.
+        if not (self.name or "").strip():
+            self.name = f"{self.first_name} {self.last_name}".strip()
         super().save(*args, **kwargs)
 
     def _get_anonymous_user(self):
