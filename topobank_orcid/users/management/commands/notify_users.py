@@ -4,7 +4,6 @@ import sys
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
-from django.templatetags.static import static
 from notifications.signals import notify
 
 _log = logging.getLogger(__name__)
@@ -29,12 +28,6 @@ class Command(BaseCommand):
             dest='recipient',
             help='Username of the user who is the recipient. If not given, send to all users.',
         )
-        parser.add_argument(
-            '--changelog',
-            action='store_true',
-            dest='changelog',
-            help='Clicking the notification links to the current Changelog file. Default is a link to home.',
-        )
 
     def handle(self, *args, **options):
         User = get_user_model()
@@ -53,10 +46,9 @@ class Command(BaseCommand):
 
         actor = Site.objects.first()
 
-        if options['changelog']:
-            href = static('other/CHANGELOG.md')
-        else:
-            href = '#'
+        # The changelog is not shipped to users. Each component's version in the
+        # side panel links to its repository, where the changelog is published.
+        href = '#'
 
         notify.send(sender=actor, recipient=recipients, verb="notifies all about", description=message, href=href)
 
