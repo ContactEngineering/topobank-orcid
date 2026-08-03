@@ -1,6 +1,6 @@
 # Changelog for plugin *topobank-orcid*
 
-## Unreleased
+## 1.0.2 (2026-08-03)
 
 - BUG: No longer stores a whitespace-only user name; added `User.display_name`
 
