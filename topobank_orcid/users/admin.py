@@ -62,10 +62,21 @@ class MyUserAdmin(AuthUserAdmin):
         ("User profile", {"fields": ("name",)}),
         ("Personal info", {"fields": ("first_name", "last_name", "email")}),
     )
-    list_display = ("id", "username", "name", "is_superuser", "orcid_uri")
+    list_display = (
+        "id",
+        "username",
+        "name",
+        "is_superuser",
+        "orcid_uri",
+        "connected_identities",
+    )
     search_fields = ["name"]
     readonly_fields = ["last_login", "date_joined"]
 
     @admin.display(description="ORCID URI")
     def orcid_uri(self, user):
         return user.orcid_uri()
+
+    @admin.display(description="Connected identities")
+    def connected_identities(self, user):
+        return ", ".join(identity["name"] for identity in user.connected_identities)

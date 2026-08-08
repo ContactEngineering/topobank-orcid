@@ -1,22 +1,21 @@
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.urls import NoReverseMatch, reverse
-
-try:
-    ACCOUNT_SIGNUP_URL = reverse("account_signup")
-except NoReverseMatch:
-    ACCOUNT_SIGNUP_URL = None
 
 
 class AccountAdapter(DefaultAccountAdapter):
     def is_open_for_signup(self, request):
-        # See: https://github.com/pennersr/django-allauth/issues/345
-        if ACCOUNT_SIGNUP_URL is not None and request.path.rstrip(
-            "/"
-        ) == ACCOUNT_SIGNUP_URL.rstrip("/"):
-            return False
-        return True
+        """
+        Whether somebody may register a local email/password account.
+
+        Controlled by `ACCOUNT_ALLOW_SIGNUP` so a deployment can offer social
+        login only. Note that django-allauth's social adapter consults this
+        method too; `SocialAccountAdapter` below overrides that, so switching
+        local registration off does not also close the door on ORCID and
+        Google.
+        """
+        return getattr(settings, "ACCOUNT_ALLOW_SIGNUP", True)
 
     def save_user(self, request, user, form, commit=True):
         """
@@ -26,10 +25,57 @@ class AccountAdapter(DefaultAccountAdapter):
         # Do not persist the user yet so we pass commit=False
         # (last argument)
         user = super().save_user(request, user, form, commit=False)
-        user.name = form.cleaned_data.get("name")
+        # The signup form carries a full name, but other callers of this
+        # adapter (password reset flows, tests) may not. `User.save` falls back
+        # to the first/last name pair when the name is left blank.
+        user.name = form.cleaned_data.get("name") or user.name
         user.save()
+        return user
 
 
 class SocialAccountAdapter(DefaultSocialAccountAdapter):
+    def is_open_for_signup(self, request, sociallogin):
+        """
+        Signing in through an identity provider always creates an account.
+
+        The default implementation defers to the account adapter, which speaks
+        for local registration only.
+        """
+        return True
+
+    def populate_user(self, request, sociallogin, data):
+        """
+        Fill in the full name from what the provider told us about the user.
+
+        ORCID and Google both supply a name, in one field or as a first/last
+        pair depending on the provider; without this the account would start
+        out nameless and be shown by username everywhere.
+        """
+        user = super().populate_user(request, sociallogin, data)
+        name = (data.get("name") or "").strip()
+        if not name:
+            name = " ".join(
+                part
+                for part in (data.get("first_name"), data.get("last_name"))
+                if part
+            ).strip()
+        if name:
+            user.name = name
+        return user
+
     def validate_disconnect(self, account, accounts):
-        raise ValidationError("Can not disconnect social account")
+        """
+        Refuse to remove the last way a user could sign back in.
+
+        Accounts can otherwise be connected and disconnected freely: a user who
+        registered with an email address can add their ORCID iD later, and one
+        who signed up through Google can drop it again once another identity is
+        in place.
+        """
+        remaining = [other for other in accounts if other.pk != account.pk]
+        if remaining or account.user.has_usable_password():
+            return
+        raise ValidationError(
+            "This is the only way you can sign in to your account. Set a "
+            "password or connect another account before disconnecting this one."
+        )

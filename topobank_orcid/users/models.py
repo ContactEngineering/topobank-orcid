@@ -7,6 +7,8 @@ from django.urls import resolve
 from django.utils.translation import gettext_lazy as _
 from topobank.authorization import get_anonymous_user
 
+from .identity import connected_identities, has_orcid
+
 _ANONYMOUS_USER_UNSET = object()
 
 
@@ -99,6 +101,26 @@ class User(AbstractUser):
             return self._orcid_info()["uri"]
         except ORCIDException:  # noqa: E722
             return None
+
+    @property
+    def has_orcid(self) -> bool:
+        """
+        Whether an ORCID account is connected to this user.
+
+        Users can also sign in through Google or with an email address and a
+        password, so an account does not necessarily carry an ORCID iD. Things
+        that require one -- publishing, above all -- ask here.
+        """
+        return has_orcid(self)
+
+    @property
+    def connected_identities(self) -> list:
+        """
+        The identities this user can sign in with, for display.
+
+        See `topobank_orcid.users.identity.connected_identities`.
+        """
+        return connected_identities(self)
 
     @property
     def is_anonymous(self):
