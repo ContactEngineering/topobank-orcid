@@ -1,5 +1,17 @@
 # Changelog for plugin *topobank-orcid*
 
+## Deprecated
+
+This package has moved into
+[ce-ui](https://github.com/ContactEngineering/ce-ui), where the three apps it
+provided live on as `ce_ui.users`, `ce_ui.authorization` and
+`ce_ui.organizations`. ce-ui was its only consumer, and keeping the two apart
+meant a synchronised release across two repositories for every change to
+identity or authorization. See the README for the settings to update; there is
+no database change to make, because the Django app labels are unchanged.
+
+No further releases will be made here.
+
 ## 1.0.2 (2026-08-03)
 
 - BUG: No longer stores a whitespace-only user name; added `User.display_name`
